@@ -1,0 +1,7 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+filterwarnings = [
+  "ignore:urllib3.*:requests.exceptions.RequestsDependencyWarning",
+]
+

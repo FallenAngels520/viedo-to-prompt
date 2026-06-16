@@ -1,0 +1,671 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI 漫剧镜头语法提取器</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4f6f8;
+        --surface: #ffffff;
+        --ink: #172026;
+        --muted: #63717c;
+        --line: #d8e0e6;
+        --accent: #0f766e;
+        --accent-strong: #0b5f59;
+        --danger: #a33a3a;
+        --code: #111827;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        font-size: 15px;
+        line-height: 1.5;
+      }
+
+      header {
+        border-bottom: 1px solid var(--line);
+        background: var(--surface);
+      }
+
+      .topbar {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 18px 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 750;
+      }
+
+      .status {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      main {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 22px 20px 40px;
+      }
+
+      .steps {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+        margin-bottom: 18px;
+      }
+
+      .step {
+        border: 1px solid var(--line);
+        background: var(--surface);
+        border-radius: 6px;
+        padding: 10px 12px;
+        font-weight: 650;
+        color: var(--muted);
+      }
+
+      .step.active {
+        border-color: var(--accent);
+        color: var(--accent-strong);
+      }
+
+      .workspace {
+        display: grid;
+        grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+        gap: 16px;
+        align-items: start;
+      }
+
+      section,
+      aside {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 16px;
+      }
+
+      h2 {
+        margin: 0 0 12px;
+        font-size: 16px;
+      }
+
+      label {
+        display: block;
+        margin: 12px 0 6px;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 650;
+      }
+
+      input,
+      select,
+      textarea {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #fff;
+        color: var(--ink);
+        padding: 9px 10px;
+        font: inherit;
+      }
+
+      textarea {
+        min-height: 74px;
+        resize: vertical;
+      }
+
+      button {
+        border: 1px solid var(--accent);
+        background: var(--accent);
+        color: white;
+        border-radius: 6px;
+        padding: 9px 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      button.secondary {
+        background: var(--surface);
+        color: var(--accent-strong);
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.5;
+      }
+
+      .actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .metric {
+        border-bottom: 1px solid var(--line);
+        padding: 8px 0;
+      }
+
+      .metric span {
+        display: block;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      pre {
+        margin: 0;
+        overflow: auto;
+        max-height: 540px;
+        background: var(--code);
+        color: #e5e7eb;
+        border-radius: 6px;
+        padding: 14px;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .shot-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .shot {
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 10px;
+      }
+
+      .shot strong {
+        display: block;
+      }
+
+      video {
+        width: 100%;
+        border-radius: 6px;
+        background: #000;
+        margin: 12px 0;
+      }
+
+      .frames {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+        margin-top: 8px;
+      }
+
+      .frames img {
+        width: 100%;
+        aspect-ratio: 9 / 16;
+        object-fit: cover;
+        border-radius: 4px;
+        border: 1px solid var(--line);
+      }
+
+      .error {
+        color: var(--danger);
+      }
+
+      .progress-panel {
+        display: none;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 10px;
+        margin-top: 12px;
+        background: #f8fafb;
+      }
+
+      .progress-panel.active {
+        display: block;
+      }
+
+      .progress-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 650;
+      }
+
+      .spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid #cbd5dc;
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+
+      .progress-track {
+        height: 8px;
+        border-radius: 99px;
+        background: #dfe7ec;
+        overflow: hidden;
+      }
+
+      .progress-bar {
+        width: 0%;
+        height: 100%;
+        background: var(--accent);
+        transition: width 0.25s ease;
+      }
+
+      .progress-meta {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      @media (max-width: 860px) {
+        .workspace,
+        .steps,
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="topbar">
+        <h1>AI 漫剧镜头语法提取器</h1>
+        <div id="status" class="status">等待上传视频</div>
+      </div>
+    </header>
+
+    <main>
+      <div class="steps">
+        <div class="step active" data-step="1">1 上传</div>
+        <div class="step" data-step="2">2 分析</div>
+        <div class="step" data-step="3">3 新内容</div>
+        <div class="step" data-step="4">4 Prompt</div>
+      </div>
+
+      <div class="workspace">
+        <aside>
+          <h2>上传与分析</h2>
+          <label for="videoFile">MP4 视频</label>
+          <input id="videoFile" type="file" accept="video/mp4" />
+          <div class="actions">
+            <button id="uploadBtn">上传</button>
+            <button id="analyzeBtn" class="secondary" disabled>开始分析</button>
+          </div>
+          <div id="analysisProgress" class="progress-panel" aria-live="polite">
+            <div class="progress-head">
+              <span class="spinner" aria-hidden="true"></span>
+              <span id="progressMessage">等待分析</span>
+            </div>
+            <div class="progress-track">
+              <div id="progressBar" class="progress-bar"></div>
+            </div>
+            <div class="progress-meta">
+              <span id="progressStage">阶段：-</span>
+              <span id="progressCount">0%</span>
+            </div>
+          </div>
+          <div id="videoInfo"></div>
+          <video id="sourceVideo" controls hidden></video>
+          <h2 style="margin-top: 18px">镜头列表</h2>
+          <div id="shotList" class="shot-list"></div>
+        </aside>
+
+        <section>
+          <h2>Shot Grammar JSON</h2>
+          <pre id="analysisJson">{}</pre>
+        </section>
+      </div>
+
+      <div class="workspace" style="margin-top: 16px">
+        <aside>
+          <h2>新内容输入</h2>
+          <label for="targetStyle">目标风格</label>
+          <input id="targetStyle" value="AI 漫剧，半写实 3D，短剧感" />
+          <label for="newStory">新故事</label>
+          <textarea id="newStory">女赏金猎人在雨夜质问机械改造男性为什么背叛她</textarea>
+          <div class="grid">
+            <div>
+              <label for="characterA">角色 A</label>
+              <textarea id="characterA">年轻女赏金猎人，黑色短发，皮衣，手握破损身份牌</textarea>
+            </div>
+            <div>
+              <label for="characterB">角色 B</label>
+              <textarea id="characterB">机械改造男性，高大沉默，半张脸是金属结构</textarea>
+            </div>
+          </div>
+          <label for="location">场景</label>
+          <textarea id="location">赛博朋克雨夜巷道，霓虹灯，积水地面</textarea>
+          <div class="grid">
+            <div>
+              <label for="aspectRatio">视频比例</label>
+              <select id="aspectRatio">
+                <option>9:16</option>
+                <option>16:9</option>
+                <option>1:1</option>
+              </select>
+            </div>
+            <div>
+              <label for="videoModel">目标模型</label>
+              <select id="videoModel">
+                <option>Seedance</option>
+                <option>通用中文</option>
+              </select>
+            </div>
+          </div>
+          <div class="actions">
+            <button id="replicateBtn" class="secondary" disabled>生成复刻 Prompt</button>
+            <button id="compileBtn" disabled>生成 Prompt</button>
+            <button id="copyBtn" class="secondary" disabled>复制 JSON</button>
+            <button id="markdownBtn" class="secondary" disabled>导出 Markdown</button>
+          </div>
+        </aside>
+
+        <section>
+          <h2>Prompt 输出</h2>
+          <pre id="promptJson">{}</pre>
+        </section>
+      </div>
+    </main>
+
+    <script>
+      const state = {
+        videoId: null,
+        analysis: null,
+        prompts: null,
+      };
+
+      const $ = (id) => document.getElementById(id);
+
+      function setStatus(message, isError = false) {
+        $("status").textContent = message;
+        $("status").className = isError ? "status error" : "status";
+      }
+
+      function setJson(id, value) {
+        $(id).textContent = JSON.stringify(value, null, 2);
+      }
+
+      function setActiveStep(stepNumber) {
+        document.querySelectorAll(".step").forEach((step) => {
+          step.classList.toggle(
+            "active",
+            Number(step.dataset.step) === stepNumber,
+          );
+        });
+      }
+
+      $("uploadBtn").addEventListener("click", async () => {
+        const file = $("videoFile").files[0];
+        if (!file) {
+          setStatus("请选择 mp4 文件", true);
+          return;
+        }
+        const form = new FormData();
+        form.append("file", file);
+        setStatus("正在上传...");
+        const response = await fetch("/api/upload", { method: "POST", body: form });
+        if (!response.ok) {
+          setStatus((await response.json()).detail || "上传失败", true);
+          return;
+        }
+        const payload = await response.json();
+        state.videoId = payload.video_id;
+        $("analyzeBtn").disabled = false;
+        $("sourceVideo").src = `/api/videos/${state.videoId}/media/source`;
+        $("sourceVideo").hidden = false;
+        setActiveStep(1);
+        setStatus(`已上传：${state.videoId}`);
+      });
+
+      $("analyzeBtn").addEventListener("click", async () => {
+        setActiveStep(2);
+        setStatus("正在分析视频...");
+        $("analyzeBtn").disabled = true;
+        const response = await fetch(`/api/videos/${state.videoId}/analyze/start`, {
+          method: "POST",
+        });
+        if (!response.ok) {
+          setStatus((await response.json()).detail || "分析失败", true);
+          $("analyzeBtn").disabled = false;
+          return;
+        }
+        const job = await response.json();
+        setStatus(job.message || "正在分析视频...");
+        updateAnalysisProgress(job);
+        pollAnalysisJob(job.job_id);
+      });
+
+      $("compileBtn").addEventListener("click", async () => {
+        if (!state.analysis) return;
+        const response = await fetch("/api/compile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            shot_grammar: state.analysis.shot_grammar,
+            new_content: readNewContent(),
+          }),
+        });
+        if (!response.ok) {
+          setStatus("Prompt 生成失败", true);
+          return;
+        }
+        state.prompts = await response.json();
+        setJson("promptJson", state.prompts);
+        $("copyBtn").disabled = false;
+        $("markdownBtn").disabled = false;
+        setActiveStep(4);
+        setStatus("Prompt 已生成");
+      });
+
+      $("replicateBtn").addEventListener("click", async () => {
+        if (!state.videoId) return;
+        setStatus("正在调用大模型生成复刻 Prompt...");
+        $("replicateBtn").disabled = true;
+        const response = await fetch(`/api/videos/${state.videoId}/replicate/llm`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            aspect_ratio: state.analysis.video_info?.aspect_ratio || $("aspectRatio").value,
+            max_workers: 4,
+          }),
+        });
+        $("replicateBtn").disabled = false;
+        if (!response.ok) {
+          setStatus("复刻 Prompt 生成失败", true);
+          return;
+        }
+        state.prompts = await response.json();
+        setJson("promptJson", state.prompts);
+        $("copyBtn").disabled = false;
+        $("markdownBtn").disabled = false;
+        setActiveStep(4);
+        setStatus("大模型复刻 Prompt 已生成");
+      });
+
+      $("copyBtn").addEventListener("click", async () => {
+        await navigator.clipboard.writeText(JSON.stringify(state.prompts, null, 2));
+        setStatus("已复制 JSON");
+      });
+
+      $("markdownBtn").addEventListener("click", async () => {
+        const response = await fetch("/api/export/markdown", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(state.prompts),
+        });
+        const text = await response.text();
+        const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "generated-prompts.md";
+        link.click();
+        URL.revokeObjectURL(link.href);
+      });
+
+      function readNewContent() {
+        return {
+          target_style: $("targetStyle").value,
+          new_story: $("newStory").value,
+          character_a: $("characterA").value,
+          character_b: $("characterB").value,
+          location: $("location").value,
+          aspect_ratio: $("aspectRatio").value,
+          video_model: $("videoModel").value,
+        };
+      }
+
+      async function pollAnalysisJob(jobId) {
+        const response = await fetch(`/api/analysis-jobs/${jobId}`);
+        if (!response.ok) {
+          setStatus("无法读取分析任务状态", true);
+          $("analyzeBtn").disabled = false;
+          return;
+        }
+
+        const job = await response.json();
+        setStatus(job.message || "正在分析视频...");
+        updateAnalysisProgress(job);
+
+        if (job.status === "completed") {
+          state.analysis = job.result;
+          renderAnalysis();
+          $("compileBtn").disabled = false;
+          $("replicateBtn").disabled = false;
+          $("analyzeBtn").disabled = false;
+          setActiveStep(3);
+          setStatus("分析完成");
+          updateAnalysisProgress({
+            status: "completed",
+            stage: "completed",
+            message: "分析完成",
+            progress: 100,
+            current: job.current,
+            total: job.total,
+          });
+          return;
+        }
+
+        if (job.status === "failed") {
+          setStatus(job.error || "分析失败", true);
+          $("analyzeBtn").disabled = false;
+          updateAnalysisProgress(job);
+          return;
+        }
+
+        window.setTimeout(() => pollAnalysisJob(jobId), 2000);
+      }
+
+      function updateAnalysisProgress(job) {
+        const panel = $("analysisProgress");
+        panel.classList.add("active");
+        const progress = Math.max(0, Math.min(100, Number(job.progress || 0)));
+        $("progressMessage").textContent = job.message || "正在分析视频...";
+        $("progressBar").style.width = `${progress}%`;
+        $("progressStage").textContent = `阶段：${stageLabel(job.stage || job.status)}`;
+        const current = job.current || 0;
+        const total = job.total || 0;
+        $("progressCount").textContent = total > 0
+          ? `${progress}% · ${current}/${total}`
+          : `${progress}%`;
+      }
+
+      function stageLabel(stage) {
+        const labels = {
+          queued: "排队",
+          video_info: "读取视频信息",
+          shot_detection: "拆分镜头",
+          keyframes: "抽取关键帧",
+          vlm: "VLM 镜头语法分析",
+          summary: "全局总结",
+          completed: "完成",
+          failed: "失败",
+          running: "运行中",
+        };
+        return labels[stage] || stage || "-";
+      }
+
+      function renderAnalysis() {
+        const info = state.analysis.video_info;
+        $("videoInfo").innerHTML = `
+          <div class="metric"><span>时长</span>${info.duration}s</div>
+          <div class="metric"><span>分辨率</span>${info.width} x ${info.height}</div>
+          <div class="metric"><span>宽高比</span>${info.aspect_ratio}</div>
+          <div class="metric"><span>FPS</span>${info.fps}</div>
+          <div class="metric"><span>音频</span>${info.has_audio ? "有" : "无"}</div>
+        `;
+        $("shotList").innerHTML = state.analysis.shots
+          .map(
+            (shot) => `
+              <div class="shot">
+                <strong>${shot.shot_id}</strong>
+                ${shot.start_time}s - ${shot.end_time}s，${shot.duration}s
+                <div class="frames">
+                  <img alt="${shot.shot_id} 起始帧" src="/api/videos/${state.videoId}/shots/${shot.shot_id}/frame_start.jpg" />
+                  <img alt="${shot.shot_id} 中间帧" src="/api/videos/${state.videoId}/shots/${shot.shot_id}/frame_mid.jpg" />
+                  <img alt="${shot.shot_id} 结束帧" src="/api/videos/${state.videoId}/shots/${shot.shot_id}/frame_end.jpg" />
+                </div>
+              </div>
+            `,
+          )
+          .join("");
+        setJson("analysisJson", state.analysis);
+      }
+
+      async function restoreLatestAnalysis() {
+        const response = await fetch("/api/videos/latest-analysis");
+        if (response.status === 404) {
+          return;
+        }
+        if (!response.ok) {
+          setStatus("无法加载已有分析结果", true);
+          return;
+        }
+        const payload = await response.json();
+        state.videoId = payload.video_id;
+        state.analysis = payload.analysis;
+        $("sourceVideo").src = `/api/videos/${state.videoId}/media/source`;
+        $("sourceVideo").hidden = false;
+        $("analyzeBtn").disabled = false;
+        $("compileBtn").disabled = false;
+        $("replicateBtn").disabled = false;
+        renderAnalysis();
+        setActiveStep(3);
+        setStatus(`已加载已有分析：${state.videoId}`);
+      }
+
+      restoreLatestAnalysis();
+    </script>
+  </body>
+</html>
