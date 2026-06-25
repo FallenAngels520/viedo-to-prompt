@@ -17,6 +17,8 @@ class ShotDetectionService:
         opencv_threshold: float = 65.0,
         opencv_min_gap_seconds: float = 3.0,
         opencv_sample_seconds: float = 0.5,
+        use_pyscenedetect: bool = True,
+        pyscene_threshold: float = 27.0,
     ) -> None:
         self.ffmpeg_path = ffmpeg_path or "ffmpeg"
         self.scene_threshold = scene_threshold
@@ -24,8 +26,19 @@ class ShotDetectionService:
         self.opencv_threshold = opencv_threshold
         self.opencv_min_gap_seconds = opencv_min_gap_seconds
         self.opencv_sample_seconds = opencv_sample_seconds
+        self.use_pyscenedetect = use_pyscenedetect
+        self.pyscene_threshold = pyscene_threshold
 
     def detect(self, video_path: Path, duration: float) -> list[Shot]:
+        cuts: list[float] = []
+        if self.use_pyscenedetect:
+            try:
+                cuts = self._detect_cut_times_pyscenedetect(video_path)
+            except (ImportError, RuntimeError) as exc:
+                logger.warning("shot_detection_pyscenedetect_failed fallback=ffmpeg error=%s", exc)
+        if cuts:
+            return self._shots_from_cut_times(cuts, duration)
+
         try:
             cuts = self._detect_cut_times(video_path)
         except (FileNotFoundError, RuntimeError, subprocess.SubprocessError) as exc:
@@ -39,6 +52,9 @@ class ShotDetectionService:
                 )
                 return self.fallback_segments(duration)
 
+        return self._shots_from_cut_times(cuts, duration)
+
+    def _shots_from_cut_times(self, cuts: list[float], duration: float) -> list[Shot]:
         times = [0.0] + [time for time in cuts if 0.0 < time < duration] + [duration]
         unique_times = sorted(set(round(time, 3) for time in times))
         if len(unique_times) <= 2:
@@ -71,6 +87,24 @@ class ShotDetectionService:
         if completed.returncode != 0:
             raise RuntimeError(output.strip() or "ffmpeg shot detection failed")
         return [float(value) for value in re.findall(r"pts_time:([0-9.]+)", output)]
+
+    def _detect_cut_times_pyscenedetect(self, video_path: Path) -> list[float]:
+        try:
+            from scenedetect import ContentDetector, detect
+        except ImportError as exc:
+            raise ImportError("PySceneDetect is not installed") from exc
+
+        try:
+            scenes = detect(str(video_path), ContentDetector(threshold=self.pyscene_threshold))
+        except Exception as exc:
+            raise RuntimeError(f"PySceneDetect failed: {exc}") from exc
+
+        cuts: list[float] = []
+        for index, (start_time, _end_time) in enumerate(scenes):
+            if index == 0:
+                continue
+            cuts.append(round(float(start_time.get_seconds()), 3))
+        return cuts
 
     def build_detection_command(self, video_path: Path) -> list[str]:
         return [

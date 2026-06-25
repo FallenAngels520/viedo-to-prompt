@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -36,6 +37,7 @@ class KeyframeService:
         ]
         for timestamp, output_path in targets:
             self._extract_one(video_path, timestamp, output_path)
+        self._write_meta(shot, keyframes)
         return keyframes
 
     def _extract_one(self, video_path: Path, timestamp: float, output_path: Path) -> None:
@@ -62,3 +64,19 @@ class KeyframeService:
             "2",
             str(output_path),
         ]
+
+    def _write_meta(self, shot: Shot, keyframes: Keyframes) -> None:
+        meta_path = keyframes.frame_start.parent / "meta.json"
+        payload = {
+            "shot_id": shot.shot_id,
+            "start_time": shot.start_time,
+            "end_time": shot.end_time,
+            "duration": shot.duration,
+            "frames": {
+                "start": keyframes.frame_start.name,
+                "middle": keyframes.frame_mid.name,
+                "end": keyframes.frame_end.name,
+            },
+            "timestamps": keyframes.timestamps,
+        }
+        meta_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")

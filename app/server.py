@@ -12,10 +12,12 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.config import load_config
+from app.harness import ReplicationHarness
 from app.logging_config import logger
 from app.models import NewContentInput, ShotGrammar
 from app.pipeline import AnalysisPipeline
 from app.prompt_compiler import PromptCompiler
+from app.replication_state import ReplicationStateStore
 from app.storage import VideoStorage
 from app.vlm_client import OpenAICompatibleVLMClient
 
@@ -23,7 +25,9 @@ from app.vlm_client import OpenAICompatibleVLMClient
 config = load_config()
 storage = VideoStorage(config.data_root)
 pipeline = AnalysisPipeline()
+harness = ReplicationHarness(pipeline=pipeline)
 compiler = PromptCompiler()
+state_store = ReplicationStateStore()
 
 app = FastAPI(title="Video-to-Shot-Grammar Prompt System")
 analysis_jobs: dict[str, dict[str, Any]] = {}
@@ -66,14 +70,16 @@ def analyze_video(video_id: str) -> dict[str, object]:
         raise HTTPException(status_code=404, detail="Video not found")
 
     try:
-        result = pipeline.analyze(workspace["source_path"], workspace["shots_dir"])
+        result = harness.run_loop1(
+            project_id=video_id,
+            video_dir=workspace["video_dir"],
+            source_path=workspace["source_path"],
+            shots_dir=workspace["shots_dir"],
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    result_path = workspace["video_dir"] / "analysis.json"
-    result_path.write_text(
-        json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    _write_analysis_outputs(workspace["video_dir"], result)
     return result
 
 
@@ -215,6 +221,7 @@ def compile_video_replicate_prompts_with_llm(
         json.dumps(result, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    state_store.record_prompt_generation(workspace["video_dir"], result)
     logger.info(
         "replicate_prompts_saved video_id=%s path=%s prompts=%s",
         video_id,
@@ -288,16 +295,15 @@ def _run_analysis_job(job_id: str, video_id: str) -> None:
         def persist_partial(partial: dict[str, Any]) -> None:
             _write_partial_analysis(workspace["video_dir"], partial)
 
-        result = pipeline.analyze(
-            workspace["source_path"],
-            workspace["shots_dir"],
+        result = harness.run_loop1(
+            project_id=video_id,
+            video_dir=workspace["video_dir"],
+            source_path=workspace["source_path"],
+            shots_dir=workspace["shots_dir"],
             progress_callback=update_progress,
             partial_callback=persist_partial,
         )
-        result_path = workspace["video_dir"] / "analysis.json"
-        result_path.write_text(
-            json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        _write_analysis_outputs(workspace["video_dir"], result)
         analysis_jobs[job_id].update(
             {
                 "status": "completed",
@@ -349,6 +355,26 @@ def _write_partial_analysis(video_dir: Path, partial: dict[str, Any]) -> None:
             shot_id,
             shot_dir / "shot_grammar.json",
         )
+
+
+def _write_analysis_outputs(video_dir: Path, result: dict[str, Any]) -> None:
+    analysis_path = video_dir / "analysis.json"
+    analysis_path.write_text(
+        json.dumps(result, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    shot_list = {
+        "video_info": result.get("video_info", {}),
+        "candidate_shots": result.get("candidate_shots", []),
+        "scenes": result.get("scenes", []),
+        "shots": result.get("shots", []),
+        "context_tracks": result.get("context_tracks", {}),
+        "keyframes": result.get("keyframes", []),
+    }
+    (video_dir / "shot_list.json").write_text(
+        json.dumps(shot_list, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
 
 static_dir = Path(__file__).parent / "static"
